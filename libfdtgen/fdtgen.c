@@ -28,7 +28,7 @@ typedef struct {
     UT_hash_handle hh;
 } path_node_t;
 
-static const char *props_with_dep[] = {"phy-handle", "next-level-cache", "interrupt-parent", "interrupts-extended", "clocks", "power-domains"};
+static const char *props_with_dep[] = {"phy-handle", "next-level-cache", "interrupt-parent", "interrupts-extended", "clocks", "power-domains", "mboxes", "shmem"};
 static const int num_props_with_dep = sizeof(props_with_dep) / sizeof(char *);
 
 typedef struct {
@@ -205,6 +205,28 @@ static void register_power_domains_dependency(fdtgen_context_t *handle,  int off
     }
 }
 
+static void register_mboxes_dependency(fdtgen_context_t *handle,  int offset, int lenp, const void *data_,
+                                       dependency_t *this)
+{
+    void *dtb = handle->buffer;
+    const void *data = data_;
+    int done = 0;
+    while (lenp > done) {
+        data = (data_ + done);
+        int phandle = fdt32_ld(data);
+        int refers_to = fdt_node_offset_by_phandle(dtb, phandle);
+        int len;
+        const void *mbox_cells = fdt_getprop(dtb, refers_to, "#mbox-cells", &len);
+        int cells = 0;
+        if (NULL != mbox_cells) {
+            cells = fdt32_ld(mbox_cells);
+        }
+
+        register_single_dependency(handle, offset, lenp, data, this);
+        done += 4 + cells * 4;
+    }
+}
+
 static void register_node_dependency(fdtgen_context_t *handle, int offset, const char *type, int p_offset)
 {
     void *dtb = handle->buffer;
@@ -227,6 +249,8 @@ static void register_node_dependency(fdtgen_context_t *handle, int offset, const
         register_clocks_dependency(handle, offset, lenp, data, this);
     } else if (strcmp(type, "power-domains") == 0) {
         register_power_domains_dependency(handle, offset, lenp, data, this);
+    } else if (strcmp(type, "mboxes") == 0) {
+        register_mboxes_dependency(handle, offset, lenp, data, this);
     } else {
         register_single_dependency(handle, offset, lenp, data, this);
     }
